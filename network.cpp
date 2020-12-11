@@ -30,14 +30,18 @@ seq_nr ack; /* acknowledgement number */
 packet info; /* the network layer packet */
 } frame;
 
-packet networkPackets[7];
-
-int timer[MAX_SEQ];
+typedef struct{
+int timerCount[MAX_SEQ];
 bool timerflag[MAX_SEQ];
+}TIMER;
+
+packet networkPackets[8];
+
+
 int networkCounter=0;
 int flag=0;
 event_type dummyEvent=network_layer_ready;
-
+TIMER timer;
 unsigned int server_socket;
 unsigned int client_socket;
 
@@ -83,11 +87,11 @@ s.seq = frame_nr; /* insert sequence number into frame */
 s.ack = (frame_expected + MAX_SEQ) % (MAX_SEQ + 1); /* piggyback ack */
 to_physical_layer(&s); /* transmit the frame */
 start_timer(frame_nr); /* start the timer running */
-printf("Data inside send fn: %d\n", s.info.data[0]);
+printf("frame sent to physical layer: %d\n", s.info.data[0]);
 }
 int main(void)
 {
-    Connect_Master();
+    
     networkPackets[0].data[0]=1;
     networkPackets[1].data[0]=2;
     networkPackets[2].data[0]=3;
@@ -105,6 +109,7 @@ int main(void)
     seq_nr i; /* used to index into the buffer array */
     event_type event;
     enable_network_layer(); /* allow network_layer_ready events */
+    Connect_Master();
     ack_expected = 0; /* next ack_expected inbound */
     next_frame_to_send = 0; /* next frame going out */
     frame_expected = 0; /* number of frame_expected inbound */
@@ -115,7 +120,7 @@ int main(void)
         switch(event) {
             case network_layer_ready: /* the network layer has a packet to send */
                 /* Accept, save, and transmit a new frame. */
-                printf("network is ready\n");
+                printf("Received packet from Network Layer\n");
                 from_network_layer(&buffer[next_frame_to_send]); /* fetch new packet */
                 nbuffered = nbuffered + 1; /* expand the sender’s window */
                 send_data(next_frame_to_send, frame_expected, buffer);/* transmit the frame */
@@ -123,9 +128,9 @@ int main(void)
                 
                 break;
             case frame_arrival: /* a data or control frame has arrived */
-                printf("frame arrival\n");
+                printf("frame arrival from Physical Layer\n");
                 from_physical_layer(&r); /* get incoming frame from_physical_layer */
-                printf("Arrived data %d\n",r.info.data[0]);
+                printf("The frame sent to network %d\n",r.info.data[0]);
                 if (r.seq == frame_expected) {
                 /* Frames are accepted only in order. */
                 to_network_layer(&r.info); /* pass packet to_network_layer */
@@ -161,11 +166,12 @@ int main(void)
             dummyEvent=network_layer_ready;
             flag=1;
             }
+
         for(int i=0;i<MAX_SEQ;i++){
-            if(timerflag[i]==true){
+            if(timer.timerflag[i]==true){
                 
-                timer[i]++;
-                if (timer[i]==10000) dummyEvent=timeout;
+                timer.timerCount[i]++;
+                if (timer.timerCount[i]==10) dummyEvent=timeout;
             }
             
         }
@@ -174,6 +180,7 @@ int main(void)
 }
 
 void enable_network_layer(void){
+    
     networkLayer=true;
 }
 
@@ -185,12 +192,12 @@ void disable_network_layer(void){
 
 void start_timer(seq_nr k){
     
-    timerflag[k]=true;
+    timer.timerflag[k]=true;
 }
 /* Stop the clock and disable the timeout event. */
 void stop_timer(seq_nr k){
     
-    timerflag[k]=false;
+    timer.timerflag[k]=false;
     
 }
 /* Allow the network layer to cause a network_layer_ready event. */
